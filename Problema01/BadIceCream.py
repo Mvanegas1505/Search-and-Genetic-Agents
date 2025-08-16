@@ -44,22 +44,25 @@ def heuristic(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 # Algoritmo A* (usando la definición formal anterior)
-def astar(start, goal, grid):
+import time
+def astar_instrumented(start, goal, grid):
     open_set = []
     heapq.heappush(open_set, (0, start))
     came_from = {}
     g_score = {start: 0}
+    explored = 0
 
     while open_set:
         _, current = heapq.heappop(open_set)
+        explored += 1
 
         if current == goal:
-            # Reconstrucción del camino
             path = []
             while current in came_from:
                 path.append(current)
                 current = came_from[current]
-            return path[::-1], g_score[goal]
+            path = path[::-1]
+            return path, g_score[goal], explored
 
         for action in ACTIONS:
             neighbor = result(current, action)
@@ -73,7 +76,7 @@ def astar(start, goal, grid):
                     f_score = tentative_g + heuristic(neighbor, goal)
                     heapq.heappush(open_set, (f_score, neighbor))
 
-    return None, float('inf')
+    return None, float('inf'), explored
 
 # Generación del entorno
 def generar_hielos(grid):
@@ -108,9 +111,21 @@ def main():
 
     # Estado inicial
     snake = [(5, 5)]
-    fruit = generar_fruta(grid)
 
-    path, tiempo_total = astar(snake[0], fruit, grid)
+    fruit = generar_fruta(grid)
+    results = []
+    t_search = 0
+    move_index = 0
+    path = []
+    cost = 0
+    explored = 0
+
+    # Initial search
+    import time
+    t0 = time.perf_counter()
+    path, cost, explored = astar_instrumented(snake[0], fruit, grid)
+    t1 = time.perf_counter()
+    time_ms = (t1 - t0) * 1000
     path = path or []
     move_index = 0
 
@@ -127,11 +142,11 @@ def main():
             move_index += 1
             snake[0] = new_head
 
-            # Si pisa hielo, romperlo
+            # Break ice if stepped on
             if grid[new_head[1]][new_head[0]] == 1:
                 grid[new_head[1]][new_head[0]] = 0
 
-            # Imprimir movimiento
+            # Print movement
             if move_index > 0:
                 prev = path[move_index-1] if move_index-1 >= 0 else snake[0]
                 dx, dy = new_head[0] - prev[0], new_head[1] - prev[1]
@@ -140,22 +155,31 @@ def main():
                 elif dy == 1: print("DOWN")
                 elif dy == -1: print("UP")
 
-            # Comer fruta
+            # Eat fruit
             if snake[0] == fruit:
                 frutas_recogidas += 1
-                print(f"\n✅ Fruta {frutas_recogidas} recogida en {tiempo_total} de tiempo total\n")
-
+                print(f"\n✅ Fruit {frutas_recogidas} collected in {time_ms:.2f} ms\n")
+                results.append({
+                    "cost": cost,
+                    "explored": explored,
+                    "time_ms": time_ms,
+                    "path": path
+                })
                 if frutas_recogidas >= frutas_objetivo:
-                    print("🎉 ¡Se recogieron todas las frutas!")
+                    print("🎉 All fruits collected!")
+                    run = False
                     break
 
-                # Nueva fruta
+                # New fruit and new search
                 fruit = generar_fruta(grid)
-                path, tiempo_total = astar(snake[0], fruit, grid)
+                t0 = time.perf_counter()
+                path, cost, explored = astar_instrumented(snake[0], fruit, grid)
+                t1 = time.perf_counter()
+                time_ms = (t1 - t0) * 1000
                 path = path or []
                 move_index = 0
 
-        # Dibujar 
+        # Draw
         WIN.fill(BLACK)
         for y in range(ROWS):
             for x in range(COLS):
@@ -166,6 +190,12 @@ def main():
         pygame.display.update()
 
     pygame.quit()
+
+    # Print all metrics after the game
+    for i, r in enumerate(results, 1):
+        print(f"Fruit #{i} | Cost={r['cost']} | Explored nodes={r['explored']} | Time={r['time_ms']:.2f} ms")
+        print(f"Path: {r['path']}")
+        print("")
 
 if __name__ == "__main__":
     main()
